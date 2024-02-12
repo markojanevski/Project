@@ -110,11 +110,14 @@ async def send_telegram_message(average_spending_by_age):
 
     await bot.send_message(chat_id=chat_id, text=message)
 
+    return None
+
+
+
 
 # Inicijaliziranje na SQL tabeli
 with app.app_context():
     db.create_all()
-
 
     users_info = [
         {'name': 'Marko', 'email': 'marko@gmail.com', 'age': 22},
