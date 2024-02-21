@@ -3,7 +3,6 @@ from flask_sqlalchemy import SQLAlchemy
 from pymongo.mongo_client import MongoClient
 from telegram import Bot
 import asyncio
-from Client_API import get_total_spent, write_to_mongodb, get_average_spending_by_age
 
 app = Flask(__name__)
 
@@ -86,6 +85,7 @@ def average_spending_by_age():
         total_spending = sum(user.spendings[0].money_spent for user in users_in_range)
         total_spending_by_age_range[range_name] = total_spending
 
+
     asyncio.run(send_telegram_message(total_spending_by_age_range))
 
     return jsonify(total_spending_by_age_range), 200
@@ -101,7 +101,6 @@ def write_to_mongodb():
             return jsonify({'error': 'Incomplete data'}), 400
 
         mongo_collection.insert_one(data)
-
         return jsonify({'message': 'Successfully added to MongoDB'}), 201
 
     except Exception as e:
