@@ -3,6 +3,7 @@ from flask_sqlalchemy import SQLAlchemy
 from pymongo.mongo_client import MongoClient
 from telegram import Bot
 import asyncio
+from Client_API import write_to_mongodb, get_total_spent, get_average_spending_by_age
 
 app = Flask(__name__)
 
@@ -12,7 +13,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
 # Konfiguracija za MongoDB
-mongo_client = MongoClient("mongodb+srv://janevskim21:qqIJiKq0R0Jo2qGd@cluster0.ffwvt0z.mongodb.net/?retryWrites=true&w=majority")
+mongo_client = MongoClient("mongodb+srv://janevskim21:qqIJiKq0R0Jo2qGd@cluster0.ffwvt0z.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0")
 mongo_db = mongo_client["users_vouchers"]
 mongo_collection = mongo_db["vouchers"]
 
@@ -94,20 +95,41 @@ def average_spending_by_age():
 # Ruta za pishuvanje na mongodb i vnesuvanje funkcii vo telegram
 @app.route('/write_to_mongodb', methods=['POST'])
 def write_to_mongodb():
+    data = request.get_json()
+    if 'user_id' not in data or 'total_spent' not in data:
+        return jsonify({'error': 'Incomplete data'}), 400
+
+
     try:
-        data = request.get_json()
+        all_users = UserInfo.query.all()
+        for user in all_users:
+            data = {
+                'user_id': user.user_id,
+                'name': user.name,
+                'email': user.email,
+                'age': user.age
+            }
+            mongo_collection.insert_one(data)
 
-        if 'user_id' not in data or 'total_spent' not in data:
-            return jsonify({'error': 'Incomplete data'}), 400
-
-        mongo_collection.insert_one(data)
-        return jsonify({'message': 'Successfully added to MongoDB'}), 201
-
+        return jsonify({'message': 'Site uspeshno se dodadeni vo MongoDB'}), 201
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/all_user_ids', methods=['GET'])
+def get_all_user_ids():
+    user_ids = [user.user_id for user in UserInfo.query.all()]
+    return jsonify(user_ids), 200
 
 # Funkcija i Inicijaliziranje na telegram za da mozhe da se povrzuva i prakja poraki
+@app.route('/send_telegram_message', methods=['POST'])
+def send_telegram_message_route():
+    try:
+        total_spending_by_age_range = request.get_json()
+        asyncio.run(send_telegram_message(total_spending_by_age_range))
+        return jsonify({'message': 'Telegram porakata e uspeshno pratena'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 async def send_telegram_message(total_spending_by_age_range):
     chat_id = '6786231466'
     message = "Total Spending by Age Ranges:\n"
@@ -115,8 +137,6 @@ async def send_telegram_message(total_spending_by_age_range):
         message += f"{range_name}: ${total_spending}\n"
 
     await bot.send_message(chat_id=chat_id, text=message)
-
-    return None
 
 
 # Inicijaliziranje na SQL tabeli

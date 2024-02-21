@@ -2,7 +2,6 @@ import pytest
 import json
 from main import app, db, UserInfo, UserSpending
 
-
 @pytest.fixture
 def client():
     app.config['TESTING'] = True

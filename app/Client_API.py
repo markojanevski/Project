@@ -28,15 +28,23 @@ def get_average_spending_by_age():
     else:
         return None
 
-if __name__ == '__main__':
-    user_id = 1
-    total_spent_data = get_total_spent(user_id)
-    if total_spent_data:
-        print("Vkupno potrošeno:", total_spent_data)
+def get_all_user_ids():
+    url = f'{FLASK_API_BASE_URL}/all_user_ids'
+    response = requests.get(url)
+    if response.status_code == 200:
+        return response.json()
+    else:
+        return []
 
-        if 'total_spent' in total_spent_data and total_spent_data['total_spent'] > 1000:
-            write_to_mongodb(total_spent_data['user_id'], total_spent_data['total_spent'])
+
+
+if __name__ == '__main__':
+    user_ids = get_all_user_ids()
+    for user_id in user_ids:
+        total_spent_data = get_total_spent(user_id)
+        if total_spent_data and total_spent_data.get('total_spent', 0) > 1000:
+            write_to_mongodb(user_id, total_spent_data['total_spent'])
 
     average_spending_data = get_average_spending_by_age()
     if average_spending_data:
-        print("Prosečno potrošuvanje po starosna grupa:", average_spending_data)
+        print("Prosechno potrosuvanje po godini:", average_spending_data)
