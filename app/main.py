@@ -1,8 +1,9 @@
 from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
-from pymongo import MongoClient
+from pymongo.mongo_client import MongoClient
 from telegram import Bot
 import asyncio
+from Client_API import get_total_spent, write_to_mongodb, get_average_spending_by_age
 
 app = Flask(__name__)
 
@@ -12,9 +13,10 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
 # Konfiguracija za MongoDB
-mongo_client = MongoClient("mongodb://192.168.1.100:27017")
+mongo_client = MongoClient("mongodb+srv://janevskim21:qqIJiKq0R0Jo2qGd@cluster0.ffwvt0z.mongodb.net/?retryWrites=true&w=majority")
 mongo_db = mongo_client["users_vouchers"]
 mongo_collection = mongo_db["vouchers"]
+
 
 # Vnesuvanje na telegram bot token
 TELEGRAM_BOT_TOKEN = '6423310833:AAGdEpfOHeeLXcMx3ZIzFRCBdipNBtC8YoI'
@@ -71,17 +73,22 @@ def average_spending_by_age():
         '>47': (48, 150)
     }
 
-    average_spending_by_age = {}
+    total_spending_by_age_range = {
+        '18-24': 0,
+        '25-30': 0,
+        '31-36': 0,
+        '37-47': 0,
+        '>47': 0
+    }
 
     for range_name, age_range in age_ranges.items():
-        average_spending = db.session.query(db.func.avg(UserSpending.money_spent)). \
-            join(UserInfo).filter(UserInfo.age >= age_range[0],
-                                  UserInfo.age <= age_range[1]).scalar()
-        average_spending_by_age[range_name] = float(average_spending) if average_spending is not None else 0.0
+        users_in_range = UserInfo.query.filter(UserInfo.age >= age_range[0], UserInfo.age <= age_range[1]).all()
+        total_spending = sum(user.spendings[0].money_spent for user in users_in_range)
+        total_spending_by_age_range[range_name] = total_spending
 
-    asyncio.run(send_telegram_message(average_spending_by_age))
+    asyncio.run(send_telegram_message(total_spending_by_age_range))
 
-    return jsonify(average_spending_by_age), 200
+    return jsonify(total_spending_by_age_range), 200
 
 
 # Ruta za pishuvanje na mongodb i vnesuvanje funkcii vo telegram
@@ -102,17 +109,15 @@ def write_to_mongodb():
 
 
 # Funkcija i Inicijaliziranje na telegram za da mozhe da se povrzuva i prakja poraki
-async def send_telegram_message(average_spending_by_age):
+async def send_telegram_message(total_spending_by_age_range):
     chat_id = '6786231466'
-    message = "Average Spending by Age Ranges:\n"
-    for range_name, avg_spending in average_spending_by_age.items():
-        message += f"{range_name}: ${avg_spending:.2f}\n"
+    message = "Total Spending by Age Ranges:\n"
+    for range_name, total_spending in total_spending_by_age_range.items():
+        message += f"{range_name}: ${total_spending}\n"
 
     await bot.send_message(chat_id=chat_id, text=message)
 
     return None
-
-
 
 
 # Inicijaliziranje na SQL tabeli
@@ -122,12 +127,17 @@ with app.app_context():
     users_info = [
         {'name': 'Marko', 'email': 'marko@gmail.com', 'age': 22},
         {'name': 'Nikola', 'email': 'nikola@icloud.com', 'age': 44},
-        {'name': 'Jovan', 'email': 'jovan@yahoo.com', 'age': 28}
+        {'name': 'Jovan', 'email': 'jovan@yahoo.com', 'age': 18}
     ]
 
     for user_info in users_info:
-        new_user = UserInfo(name=user_info['name'], email=user_info['email'], age=user_info['age'])
-        db.session.add(new_user)
+        user = UserInfo.query.filter_by(name=user_info['name']).first()
+        if not user:
+            new_user = UserInfo(name=user_info['name'], email=user_info['email'], age=user_info['age'])
+            db.session.add(new_user)
+        else:
+            user.email = user_info['email']
+            user.age = user_info['age']
 
     db.session.commit()
 
@@ -139,15 +149,18 @@ with app.app_context():
 
     for user_info in users_info:
         user_name = user_info['name']
-        user_id = UserInfo.query.filter_by(name=user_name).first().user_id
-        spending_info = user_spending_info[user_name]
-
-        sample_spending = UserSpending(user_id=user_id,
-                                       money_spent=spending_info['money_spent'],
-                                       year=spending_info['year'])
-        db.session.add(sample_spending)
+        user = UserInfo.query.filter_by(name=user_name).first()
+        if user:
+            user_id = user.user_id
+            if UserSpending.query.filter_by(user_id=user_id).count() == 0:
+                spending_info = user_spending_info[user_name]
+                sample_spending = UserSpending(user_id=user_id,
+                                               money_spent=spending_info['money_spent'],
+                                               year=spending_info['year'])
+                db.session.add(sample_spending)
 
     db.session.commit()
+
 
 if __name__ == '__main__':
     app.run(debug=True)
