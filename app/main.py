@@ -3,7 +3,6 @@ from flask_sqlalchemy import SQLAlchemy
 from pymongo.mongo_client import MongoClient
 from telegram import Bot
 import asyncio
-from Client_API import write_to_mongodb, get_total_spent, get_average_spending_by_age
 
 app = Flask(__name__)
 
@@ -13,7 +12,8 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
 # Konfiguracija za MongoDB
-mongo_client = MongoClient("mongodb+srv://janevskim21:qqIJiKq0R0Jo2qGd@cluster0.ffwvt0z.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0")
+mongo_client = MongoClient("mongodb+srv://janevskim21:qqIJiKq0R0Jo2qGd@cluster0.ffwvt0z.mongodb.net/"
+                           "?retryWrites=true&w=majority&appName=Cluster0")
 mongo_db = mongo_client["users_vouchers"]
 mongo_collection = mongo_db["vouchers"]
 
@@ -53,7 +53,7 @@ class UserSpending(db.Model):
 @app.route('/total_spent/<int:user_id>', methods=['GET'])
 def total_spent(user_id):
     total_spent = (UserSpending.query.filter_by(user_id=user_id)
-                   .with_entities(db.func.avg(UserSpending.money_spent)).scalar())
+                   .with_entities(db.func.sum(UserSpending.money_spent)).scalar())
 
     if total_spent is not None:
         response = {'user_id': user_id, 'total_spent': float(total_spent)}
@@ -86,7 +86,6 @@ def average_spending_by_age():
         total_spending = sum(user.spendings[0].money_spent for user in users_in_range)
         total_spending_by_age_range[range_name] = total_spending
 
-
     asyncio.run(send_telegram_message(total_spending_by_age_range))
 
     return jsonify(total_spending_by_age_range), 200
@@ -95,30 +94,32 @@ def average_spending_by_age():
 # Ruta za pishuvanje na mongodb i vnesuvanje funkcii vo telegram
 @app.route('/write_to_mongodb', methods=['POST'])
 def write_to_mongodb():
-    data = request.get_json()
-    if 'user_id' not in data or 'total_spent' not in data:
-        return jsonify({'error': 'Incomplete data'}), 400
-
-
     try:
         all_users = UserInfo.query.all()
+        users_eligible_for_voucher = []
         for user in all_users:
-            data = {
-                'user_id': user.user_id,
-                'name': user.name,
-                'email': user.email,
-                'age': user.age
-            }
-            mongo_collection.insert_one(data)
+            total_spent = (db.session.query(db.func.sum(UserSpending.money_spent))
+                           .filter_by(user_id=user.user_id).scalar())
+            if total_spent is not None and total_spent >= 500:
+                user_data = {
+                    'user_id': user.user_id,
+                    'name': user.name,
+                    'email': user.email,
+                    'age': user.age
+                }
+                mongo_collection.insert_one(user_data)
+                users_eligible_for_voucher.append(user_data)
 
         return jsonify({'message': 'Site uspeshno se dodadeni vo MongoDB'}), 201
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+
 @app.route('/all_user_ids', methods=['GET'])
 def get_all_user_ids():
     user_ids = [user.user_id for user in UserInfo.query.all()]
     return jsonify(user_ids), 200
+
 
 # Funkcija i Inicijaliziranje na telegram za da mozhe da se povrzuva i prakja poraki
 @app.route('/send_telegram_message', methods=['POST'])
@@ -129,6 +130,7 @@ def send_telegram_message_route():
         return jsonify({'message': 'Telegram porakata e uspeshno pratena'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
 
 async def send_telegram_message(total_spending_by_age_range):
     chat_id = '6786231466'
