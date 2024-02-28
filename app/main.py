@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, render_template, redirect, url_for, after_this_request
 from flask_sqlalchemy import SQLAlchemy
 from pymongo.mongo_client import MongoClient
 from telegram import Bot
@@ -49,22 +49,92 @@ class UserSpending(db.Model):
         return f"<UserSpending(user_id={self.user_id}, money_spent={self.money_spent}, year={self.year})>"
 
 
+# Ruta za da mozhe html file da se napravi za pochetnata strana
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+
+# Ruta za dodavanje i chuvanje na nov user
+@app.route('/add_new_user', methods=['GET'])
+def add_new_user():
+    return render_template('add_new_user.html')
+
+
+@app.route('/save_new_user', methods=['POST'])
+def save_new_user():
+    name = request.form['name']
+    email = request.form['email']
+    age = request.form['age']
+    money_spent = request.form['money_spent']
+    year = request.form['year']
+
+    new_user = UserInfo(name=name, email=email, age=age)
+
+    try:
+        db.session.add(new_user)
+        db.session.commit()
+
+        new_spending = UserSpending(user_id=new_user.user_id, money_spent=money_spent, year=year)
+        db.session.add(new_spending)
+        db.session.commit()
+
+        return redirect(url_for('index'))
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+# Ruta za brishenje na korisnik i potrebnite funkcii
+@app.route('/delete_user', methods=['GET'])
+def delete_user():
+    all_users = UserInfo.query.all()
+    return render_template('delete_user.html', users=all_users)
+
+
+@app.route('/delete_user/<int:user_id>', methods=['POST', 'DELETE'])
+def delete_single_user(user_id):
+    if request.method == 'POST' or request.method == 'DELETE':
+        user = UserInfo.query.get(user_id)
+        if user:
+            try:
+                UserSpending.query.filter_by(user_id=user_id).delete()
+
+                db.session.delete(user)
+                db.session.commit()
+
+                return redirect(url_for('delete_user'))
+            except Exception as e:
+                db.session.rollback()
+                return jsonify({'error': str(e)}), 500
+        else:
+            return jsonify({'error': 'User not found'}), 404
+
+
 # Ruta za vkupna potroshuvachka na user
 @app.route('/total_spent/<int:user_id>', methods=['GET'])
 def total_spent(user_id):
-    total_spent = (UserSpending.query.filter_by(user_id=user_id)
-                   .with_entities(db.func.sum(UserSpending.money_spent)).scalar())
-
-    if total_spent is not None:
-        response = {'user_id': user_id, 'total_spent': float(total_spent)}
-        return jsonify(response), 200
+    user = UserInfo.query.get(user_id)
+    if user:
+        total_spent_amount = (UserSpending.query.filter_by(user_id=user_id)
+                              .with_entities(db.func.sum(UserSpending.money_spent)).scalar())
+        if total_spent_amount is not None:
+            if request.accept_mimetypes.accept_html:
+                return render_template('total_spent.html', user_id=user_id, total_spent=total_spent_amount), 200
+            else:
+                return jsonify({'user_id': user_id, 'total_spent': total_spent_amount}), 200
+        else:
+            return jsonify({'error': 'No spending record found for the user'}), 404
     else:
-        return jsonify({'error': 'User not found'}), 404
+        if request.accept_mimetypes.accept_html:
+            return render_template('user_not_found.html', user_id=user_id), 404
+        else:
+            return jsonify({'error': 'User not found'}), 404
 
 
 # Ruta za dobivanje na sredna potroshuvachka spored godini
 @app.route('/average_spending_by_age', methods=['GET'])
-def average_spending_by_age():
+def average_spending_by_age_route():
     age_ranges = {
         '18-24': (18, 24),
         '25-30': (25, 30),
@@ -86,9 +156,15 @@ def average_spending_by_age():
         total_spending = sum(user.spendings[0].money_spent for user in users_in_range)
         total_spending_by_age_range[range_name] = total_spending
 
-    asyncio.run(send_telegram_message(total_spending_by_age_range))
+    @after_this_request
+    def send_telegram(response):
+        asyncio.run(send_telegram_message(total_spending_by_age_range))
+        return response
 
-    return jsonify(total_spending_by_age_range), 200
+    if request.accept_mimetypes.accept_html:
+        return render_template('average_spending_by_age.html', total_spending_by_age_range=total_spending_by_age_range)
+    else:
+        return jsonify(total_spending_by_age_range)
 
 
 # Ruta za pishuvanje na mongodb i vnesuvanje funkcii vo telegram

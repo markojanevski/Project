@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Total Spent</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 20px auto;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .total-spent {
+            margin-bottom: 20px;
+        }
+
+        .btn-back {
+            display: block;
+            width: 100px;
+            margin: 0 auto;
+            text-align: center;
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            text-decoration: none;
+        }
+
+        .btn-back:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Total Spent</h1>
+        <div class="total-spent">
+            <p>User ID: {{ user_id }}</p>
+            <p>Total Spent: ${{ total_spent }}</p>
+        </div>
+        <button onclick="goToHome()" class="btn-back">Home</button>
+    </div>
+
+    <script>
+        function goToHome() {
+            window.location.href = "/";
+        }
+    </script>
+</body>
+</html>

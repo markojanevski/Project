@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Average Spending by Age Range</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.0/chart.min.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 20px auto;
+            background-color: #fff;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+        }
+
+        h1 {
+            text-align: center;
+        }
+
+        .age-ranges {
+            margin-bottom: 20px;
+        }
+
+        .age-ranges p {
+            margin: 5px 0;
+        }
+
+        #ageRangeChart {
+            display: block;
+            margin: 0 auto;
+        }
+
+        .home-button {
+            background-color: green;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            text-decoration: none;
+            display: block;
+            width: fit-content;
+            margin: 20px auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Average Spending by Age</h1>
+        <div class="age-ranges" id="ageRanges">
+            {% for range_name, total_spending in total_spending_by_age_range.items() %}
+                <p>{{ range_name }}: ${{ total_spending }}</p>
+            {% endfor %}
+        </div>
+        <a href="/" class="home-button">Home</a>
+        <canvas id="ageRangeChart" width="800" height="400"></canvas>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.0/chart.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            fetch('/average_spending_by_age')
+                .then(response => response.json())
+                .then(data => {
+                    const labels = Object.keys(data);
+                    const values = Object.values(data);
+
+                    const ctx = document.getElementById('ageRangeChart').getContext('2d');
+                    new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                label: 'Average Spending ($)',
+                                data: values,
+                                backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                                borderColor: 'rgba(54, 162, 235, 1)',
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            scales: {
+                                y: {
+                                    beginAtZero: true
+                                }
+                            }
+                        }
+                    });
+                });
+        });
+    </script>
+</body>
+</html>
